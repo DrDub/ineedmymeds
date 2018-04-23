@@ -107,6 +107,7 @@ def search():
 
         # fetch availability
         pharmacies = list()
+        # TODO: fetch 20, then reorder by availability and keep 10
         for row in cur.execute(
         """SELECT pharma_id, (lat - ?) * (lat - ?) + (long - ?) * (long - ?) AS distance
         FROM PharmaLoc
@@ -195,6 +196,7 @@ ORDER BY when_reported""", (pharma_id, drug_id))
     })
 
 
+# example POST 0 to http://localhost:5000/api/v1/drug/22/at/6453/available?by_pharmacist=0
 @app.route('/api/v1/drug/<int:drug_id>/at/<int:pharma_id>/available',
            methods=['POST'])
 def set_available(drug_id, pharma_id):
@@ -241,6 +243,38 @@ def drug_onboarding():
     db.commit()
 
     return str(drug_id)
+
+
+@app.route('/api/v1/pharmacy', methods=['GET'])
+def pharmacy_search():
+    if not request.json or 'name' not in request.json or \
+          'address' not in request.json or 'phone' not in request.json or \
+          'lat' not in request.json or 'long' not in request.json:
+        abort(400)
+
+    # get DB
+    db = get_db()
+    cur = db.cursor()
+
+    # pharmacy on-boarding
+    doc = json.dumps({
+        'name': request.json['name'],
+        'address': request.json['address'],
+        'lat': request.json['lat'],
+        'long': request.json['long'],
+        'phone': request.json['phone']
+    })
+
+    cur.execute('INSERT INTO PharmaDoc VALUES(?)', (doc,))
+    pharma_id = cur.lastrowid
+
+    cur.execute('INSERT INTO PharmaLoc VALUES(?,?,?)',
+                (pharma_id,
+                 float(request.json['lat']),
+                 float(request.json['long'])))
+    db.commit()
+
+    return str(pharma_id)
 
 
 @app.route('/api/v1/pharmacy', methods=['POST'])
@@ -321,12 +355,15 @@ LIMIT 1""", (drug_id,)).fetchone()
     })
 
 
+#TODO expand this to include location
 @app.route('/api/v1/drug/requested', methods=['GET'])
 def drugs_requested():
     # get DB
     db = get_db()
     cur = db.cursor()
 
+    # TODO: add counts for number of requests
+    
     # get recently requested drugs
     cur.execute("""SELECT DISTINCT drug_id
 FROM DrugRequests
